@@ -1,0 +1,452 @@
+{% extends "layout.html" %}
+{% block title %}AI Personalized Learning Plan{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+    <!-- Domain Header & Selector Controls -->
+    <div class="card card-custom p-4 mb-4 bg-white shadow-sm border-0">
+        <div class="row align-items-center g-3">
+            <div class="col-md-7">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="badge bg-primary me-2 px-3 py-2 fs-6 rounded-pill">
+                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI Powered Engine
+                    </span>
+                    <span class="text-muted small fw-semibold" id="domainTag">
+                        Context Domain: <strong id="currentDomainName">{{ selected_domain | capitalize }}</strong>
+                    </span>
+                </div>
+                <h2 class="fw-bold mb-1 text-dark" id="dynamicTitle">
+                    <span id="domainTitleText">{{ selected_domain | capitalize }}</span> Learning Plan
+                </h2>
+                <p class="text-secondary mb-0 small">
+                    Multi-dimensional AI reasoning combining your learner characteristics, knowledge mastery state, and dynamic curriculum requirements.
+                </p>
+            </div>
+
+            <!-- Controls: Domain Switcher & Goal Selector -->
+            <div class="col-md-5">
+                <div class="bg-light p-3 rounded-4 border">
+                    <form id="recommendationConfigForm" onsubmit="event.preventDefault(); generateRecommendation();">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-slate-700 small mb-1">
+                                <i class="fa-solid fa-layer-group me-1 text-primary"></i> Learning Domain
+                            </label>
+                            <select id="domainSelect" class="form-select form-select-sm rounded-3 shadow-none border-secondary-subtle" onchange="onDomainChange()">
+                                {% for d in domains %}
+                                    <option value="{{ d.id }}" {% if d.id == selected_domain %}selected{% endif %}>
+                                        {{ d.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-slate-700 small mb-1">
+                                <i class="fa-solid fa-bullseye me-1 text-danger"></i> Learning Goal (Optional)
+                            </label>
+                            <select id="goalTypeSelect" class="form-select form-select-sm rounded-3 shadow-none border-secondary-subtle">
+                                <option value="conceptual_understanding">Conceptual Understanding</option>
+                                <option value="exam_preparation">Exam Preparation</option>
+                                <option value="skill_development">Skill Development</option>
+                                <option value="project_preparation">Project Preparation</option>
+                                <option value="interview_preparation">Interview Preparation</option>
+                                <option value="revision">Revision & Mastery</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" id="generateBtn" class="btn btn-primary btn-sm w-100 rounded-pill py-2 font-weight-medium shadow-sm">
+                            <i class="fa-solid fa-bolt me-1"></i> Generate AI Learning Plan
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State Overlay -->
+    <div id="loadingOverlay" class="text-center py-5 d-none">
+        <div class="spinner-border text-primary me-2" style="width: 3rem; height: 3rem;" role="status"></div>
+        <h5 class="mt-3 fw-bold text-dark">Synthesizing AI Learning Plan...</h5>
+        <p class="text-muted small">Analyzing psychological traits, prerequisite relationships, and domain curriculum...</p>
+    </div>
+
+    <!-- Main Recommendation Display Area -->
+    <div id="recommendationContent">
+        <!-- 1. Executive Summary & Learner Approach Card -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-8">
+                <div class="card card-custom h-100 p-4 border-0 shadow-sm bg-gradient-light">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary text-white rounded-3 p-2 me-3 d-flex align-items-center justify-content-center" style="width: 42px; height: 42px;">
+                            <i class="fa-solid fa-compass fs-5"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="fw-bold mb-0 text-dark">Executive Strategy Summary</h5>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6 rounded-pill" id="overallMasteryBadge">
+                                    Overall Mastery: <strong id="overallMasteryPct">0%</strong>
+                                </span>
+                            </div>
+                            <span class="text-muted small" id="generatedTimestamp">AI Generated Strategy</span>
+                        </div>
+                    </div>
+
+                    <!-- Domain Mastery Progress Bar -->
+                    <div class="p-3 bg-white rounded-3 border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-bold text-dark"><i class="fa-solid fa-chart-line text-primary me-1"></i> Assessed Domain Mastery</span>
+                            <span class="small fw-bold text-dark" id="overallMasteryLabel">0%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div id="overallMasteryBar" class="progress-bar bg-primary" role="progressbar" style="width: 0%;"></div>
+                        </div>
+                        <div class="mt-2 pt-2 border-top" id="masteredAreasWrapper">
+                            <span class="text-muted small fw-bold d-block mb-1"><i class="fa-solid fa-circle-check text-success me-1"></i> Mastered Strengths (High Mastery):</span>
+                            <div class="d-flex flex-wrap gap-1" id="masteredBadges">
+                                <!-- Mastered Strengths Badges -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-slate-700 lead fs-6 mb-3" id="planSummaryText">
+                        Loading strategy summary...
+                    </p>
+                    <div class="p-3 bg-white rounded-3 border">
+                        <div class="row g-2" id="approachBadges">
+                            <!-- Approach Badges dynamically injected -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card card-custom h-100 p-4 border-0 shadow-sm bg-white">
+                    <h5 class="fw-bold mb-3 text-dark">
+                        <i class="fa-solid fa-user-gear me-2 text-primary"></i>Learner Persona Rationale
+                    </h5>
+                    <div class="mb-3">
+                        <label class="text-muted small fw-bold text-uppercase d-block mb-1">Preferences Considered</label>
+                        <ul class="list-unstyled mb-0" id="preferencesList">
+                            <!-- Preferences injected -->
+                        </ul>
+                    </div>
+                    <hr class="my-2">
+                    <div>
+                        <label class="text-muted small fw-bold text-uppercase d-block mb-1">Strategy Rationale</label>
+                        <p class="text-secondary small mb-0" id="approachReasonText">
+                            <!-- Reason injected -->
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Priority Learning Areas Grid -->
+        <div class="card card-custom p-4 mb-4 border-0 shadow-sm bg-white">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h4 class="fw-bold mb-1 text-dark">
+                        <i class="fa-solid fa-list-check me-2 text-warning"></i>Remedial Focus Areas (Lowest Mastery)
+                    </h4>
+                    <p class="text-muted small mb-0">Concepts with low assessed scores prioritized for immediate learning focus and practice reinforcement.</p>
+                </div>
+            </div>
+
+            <div class="row g-3" id="priorityAreasGrid">
+                <!-- Priority Area Cards dynamically injected -->
+            </div>
+        </div>
+
+        <!-- 3. Recommended Learning Sequence -->
+        <div class="card card-custom p-4 mb-4 border-0 shadow-sm bg-white">
+            <h4 class="fw-bold mb-3 text-dark">
+                <i class="fa-solid fa-timeline me-2 text-info"></i>Recommended Learning Sequence
+            </h4>
+            <div class="timeline-wrapper ps-3" id="learningSequenceTimeline">
+                <!-- Sequence steps injected -->
+            </div>
+        </div>
+
+        <!-- 4. Domain Educational Resources & Practice Activities -->
+        <div class="row g-4">
+            <!-- Resources -->
+            <div class="col-lg-7">
+                <div class="card card-custom h-100 p-4 border-0 shadow-sm bg-white">
+                    <h4 class="fw-bold mb-3 text-dark">
+                        <i class="fa-solid fa-book-bookmark me-2 text-success"></i>Curated Learning Resources
+                    </h4>
+                    <div class="d-flex flex-column gap-3" id="resourcesContainer">
+                        <!-- Resources injected -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Practice Recommendations -->
+            <div class="col-lg-5">
+                <div class="card card-custom h-100 p-4 border-0 shadow-sm bg-white">
+                    <h4 class="fw-bold mb-3 text-dark">
+                        <i class="fa-solid fa-dumbbell me-2 text-purple"></i>Practice & Activities
+                    </h4>
+                    <div class="d-flex flex-column gap-3" id="practiceContainer">
+                        <!-- Practice recommendations injected -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const INITIAL_DOMAIN = "{{ selected_domain }}";
+
+document.addEventListener("DOMContentLoaded", function() {
+    loadLatestRecommendation(INITIAL_DOMAIN);
+});
+
+function onDomainChange() {
+    const domainId = document.getElementById("domainSelect").value;
+    const domainName = document.getElementById("domainSelect").options[document.getElementById("domainSelect").selectedIndex].text;
+    
+    document.getElementById("domainTitleText").innerText = domainName;
+    document.getElementById("currentDomainName").innerText = domainName;
+    
+    loadLatestRecommendation(domainId);
+}
+
+function loadLatestRecommendation(domainId) {
+    showLoading(true);
+    fetch(`/api/recommendations/latest?domain_id=${domainId}`)
+        .then(res => res.json())
+        .then(data => {
+            showLoading(false);
+            if (data.success && data.recommendation) {
+                renderRecommendation(data.recommendation);
+            } else {
+                // Auto-generate if none exists yet for this domain
+                generateRecommendation();
+            }
+        })
+        .catch(err => {
+            showLoading(false);
+            console.error("Error loading recommendation:", err);
+            generateRecommendation();
+        });
+}
+
+function generateRecommendation() {
+    const domainId = document.getElementById("domainSelect").value;
+    const goalType = document.getElementById("goalTypeSelect").value;
+    const goalText = document.getElementById("goalTypeSelect").options[document.getElementById("goalTypeSelect").selectedIndex].text;
+
+    showLoading(true);
+
+    const payload = {
+        domain_id: domainId,
+        learning_goal: {
+            type: goalType,
+            description: `Targeting ${goalText} for ${domainId}`
+        }
+    };
+
+    fetch('/api/recommendations/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        showLoading(false);
+        if (data.success && data.recommendation) {
+            renderRecommendation(data.recommendation);
+        } else {
+            alert("Error generating learning plan: " + (data.error || "Unknown error"));
+        }
+    })
+    .catch(err => {
+        showLoading(false);
+        alert("Server error connecting to recommendation service.");
+    });
+}
+
+function showLoading(isLoading) {
+    const overlay = document.getElementById("loadingOverlay");
+    const content = document.getElementById("recommendationContent");
+    const btn = document.getElementById("generateBtn");
+    
+    if (isLoading) {
+        overlay.classList.remove("d-none");
+        content.classList.add("opacity-25");
+        btn.disabled = true;
+    } else {
+        overlay.classList.add("d-none");
+        content.classList.remove("opacity-25");
+        btn.disabled = false;
+    }
+}
+
+function renderRecommendation(rec) {
+    if (!rec) return;
+
+    // Domain Title Update
+    const domainName = rec.domain ? rec.domain.name : "Learning";
+    document.getElementById("domainTitleText").innerText = domainName;
+    document.getElementById("currentDomainName").innerText = domainName;
+
+    // Overall Mastery Gauge Update
+    const oMastery = typeof rec.overall_mastery === 'number' ? Math.round(rec.overall_mastery * 100) : 0;
+    document.getElementById("overallMasteryPct").innerText = `${oMastery}%`;
+    document.getElementById("overallMasteryLabel").innerText = `${oMastery}% Mastery`;
+    const mBar = document.getElementById("overallMasteryBar");
+    mBar.style.width = `${oMastery}%`;
+    mBar.className = `progress-bar ${oMastery >= 70 ? 'bg-success' : (oMastery >= 40 ? 'bg-primary' : 'bg-warning')}`;
+
+    // Mastered Strengths Badges
+    const mBadges = document.getElementById("masteredBadges");
+    mBadges.innerHTML = "";
+    if (rec.mastered_areas && rec.mastered_areas.length > 0) {
+        rec.mastered_areas.forEach(m => {
+            const pct = Math.round(m.mastery * 100);
+            const b = document.createElement("span");
+            b.className = "badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-2 small";
+            b.innerHTML = `<i class="fa-solid fa-check-circle me-1"></i>${m.area_name} (${pct}%)`;
+            mBadges.appendChild(b);
+        });
+    } else {
+        mBadges.innerHTML = `<span class="text-muted small italic">No high-mastery areas recorded yet for this domain.</span>`;
+    }
+
+    // Summary & Learner Rationale
+    document.getElementById("planSummaryText").innerText = rec.summary || "";
+    document.getElementById("approachReasonText").innerText = rec.learner_approach ? rec.learner_approach.reason : "";
+    document.getElementById("generatedTimestamp").innerText = rec.generated_at ? `Generated: ${new Date(rec.generated_at).toLocaleString()}` : `AI Engine: ${rec.model_name || 'Active'}`;
+
+    // Approach Badges
+    const approachContainer = document.getElementById("approachBadges");
+    approachContainer.innerHTML = "";
+    if (rec.learner_approach && rec.learner_approach.recommended_approach) {
+        rec.learner_approach.recommended_approach.forEach(app => {
+            const col = document.createElement("div");
+            col.className = "col-auto";
+            col.innerHTML = `<span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill small"><i class="fa-solid fa-check me-1"></i>${app}</span>`;
+            approachContainer.appendChild(col);
+        });
+    }
+
+    // Preferences Considered
+    const prefList = document.getElementById("preferencesList");
+    prefList.innerHTML = "";
+    if (rec.learner_approach && rec.learner_approach.preferences_considered) {
+        rec.learner_approach.preferences_considered.forEach(pref => {
+            const li = document.createElement("li");
+            li.className = "small text-slate-700 mb-1";
+            li.innerHTML = `<i class="fa-solid fa-tag text-primary me-2"></i>${pref}`;
+            prefList.appendChild(li);
+        });
+    }
+
+    // Priority Areas Grid
+    const priorityGrid = document.getElementById("priorityAreasGrid");
+    priorityGrid.innerHTML = "";
+    if (rec.priority_areas && rec.priority_areas.length > 0) {
+        rec.priority_areas.forEach(area => {
+            const pBadgeClass = area.priority === 'very_high' ? 'bg-danger' : (area.priority === 'high' ? 'bg-warning text-dark' : 'bg-info text-dark');
+            const masteryPct = Math.round(area.mastery * 100);
+            
+            const subConceptsHtml = (area.sub_concepts && area.sub_concepts.length > 0)
+                ? `<div class="mb-2"><span class="small text-muted fw-semibold">Target Sub-concepts: </span>${area.sub_concepts.map(sc => `<span class="badge bg-white text-dark border px-2 py-1 rounded-2 me-1 mb-1" style="font-size: 0.7rem;"><i class="fa-solid fa-angle-right text-primary me-1"></i>${sc}</span>`).join('')}</div>`
+                : '';
+
+            const card = document.createElement("div");
+            card.className = "col-md-6";
+            card.innerHTML = `
+                <div class="p-3 border rounded-3 bg-light h-100">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="fw-bold mb-0 text-dark">${area.area_name}</h6>
+                        <span class="badge ${pBadgeClass} text-uppercase px-2 py-1">${area.priority.replace('_', ' ')}</span>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small text-muted mb-1">
+                            <span>Current Topic Mastery</span>
+                            <span class="fw-bold text-dark">${masteryPct}%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar ${masteryPct >= 70 ? 'bg-success' : (masteryPct >= 40 ? 'bg-warning' : 'bg-danger')}" style="width: ${masteryPct}%;"></div>
+                        </div>
+                    </div>
+                    ${subConceptsHtml}
+                    <p class="small text-secondary mb-2">${area.reason}</p>
+                    <div class="d-flex flex-wrap gap-1">
+                        ${(area.recommended_resource_types || []).map(r => `<span class="badge bg-secondary-subtle text-secondary px-2 py-1 rounded-2 border" style="font-size: 0.7rem;">${r}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+            priorityGrid.appendChild(card);
+        });
+    } else {
+        priorityGrid.innerHTML = `<div class="col-12 text-muted small">No specific low-mastery priority areas identified.</div>`;
+    }
+
+    // Learning Sequence Timeline
+    const timeline = document.getElementById("learningSequenceTimeline");
+    timeline.innerHTML = "";
+    if (rec.learning_sequence && rec.learning_sequence.length > 0) {
+        rec.learning_sequence.forEach(step => {
+            const item = document.createElement("div");
+            item.className = "mb-3 position-relative border-start border-2 border-primary ps-3";
+            item.innerHTML = `
+                <div class="d-flex align-items-center mb-1">
+                    <span class="badge bg-primary rounded-circle me-2" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;">${step.step}</span>
+                    <h6 class="fw-bold mb-0 text-dark">${step.area_name}</h6>
+                </div>
+                <p class="small text-dark mb-1"><strong>Objective:</strong> ${step.objective}</p>
+                <p class="small text-secondary mb-0"><strong>Approach:</strong> ${step.approach}</p>
+            `;
+            timeline.appendChild(item);
+        });
+    }
+
+    // Resources Container
+    const resContainer = document.getElementById("resourcesContainer");
+    resContainer.innerHTML = "";
+    if (rec.resources && rec.resources.length > 0) {
+        rec.resources.forEach(r => {
+            const rCard = document.createElement("div");
+            rCard.className = "p-3 border rounded-3 bg-light";
+            const linkHtml = r.url ? `<a href="${r.url}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3 mt-2"><i class="fa-solid fa-external-link me-1"></i>Open Resource</a>` : `<span class="badge bg-light text-muted border mt-2"><i class="fa-solid fa-shield-halved me-1"></i>Curated Type Recommendation</span>`;
+            
+            rCard.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <h6 class="fw-bold mb-0 text-dark">${r.title}</h6>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">${r.type}</span>
+                </div>
+                <p class="small text-secondary mb-2">${r.description}</p>
+                <p class="small text-muted mb-1"><em>Why Recommended:</em> ${r.why_recommended}</p>
+                ${linkHtml}
+            `;
+            resContainer.appendChild(rCard);
+        });
+    }
+
+    // Practice Recommendations Container
+    const pracContainer = document.getElementById("practiceContainer");
+    pracContainer.innerHTML = "";
+    if (rec.practice_recommendations && rec.practice_recommendations.length > 0) {
+        rec.practice_recommendations.forEach(p => {
+            const pCard = document.createElement("div");
+            pCard.className = "p-3 border rounded-3 bg-light";
+            pCard.innerHTML = `
+                <div class="d-flex align-items-center mb-1">
+                    <i class="fa-solid fa-circle-check text-success me-2"></i>
+                    <h6 class="fw-bold mb-0 text-dark">${p.activity_type}</h6>
+                </div>
+                <p class="small text-secondary mb-1">${p.description}</p>
+                <p class="small text-muted mb-0"><em>Rationale:</em> ${p.reason}</p>
+            `;
+            pracContainer.appendChild(pCard);
+        });
+    }
+}
+</script>
+{% endblock %}

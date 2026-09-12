@@ -11,6 +11,12 @@ class TestE2ERoutes(unittest.TestCase):
         self.client = app.test_client()
         init_db()
         seed_database()
+        from db import get_db
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM students WHERE email = 'jane@example.com';")
+        conn.commit()
+        conn.close()
 
     def test_full_user_flow(self):
         # 1. Register

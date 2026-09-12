@@ -71,12 +71,23 @@ def init_db():
     );
     """)
 
+    # 0. Domains Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS domains (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL
+    );
+    """)
+
     # 5. Knowledge Topics Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS knowledge_topics (
         topic_id TEXT PRIMARY KEY,
+        domain_id TEXT NOT NULL DEFAULT 'python',
         topic_name TEXT NOT NULL,
-        description TEXT NOT NULL
+        description TEXT NOT NULL,
+        FOREIGN KEY (domain_id) REFERENCES domains(id)
     );
     """)
 
@@ -156,6 +167,29 @@ def init_db():
         FOREIGN KEY (attempt_id) REFERENCES baseline_attempts(attempt_id) ON DELETE CASCADE
     );
     """)
+
+    # 11. Recommendations Table (Stored AI Recommendation Snapshots)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS recommendations (
+        id TEXT PRIMARY KEY,
+        student_id TEXT NOT NULL,
+        domain_id TEXT NOT NULL,
+        generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        model_name TEXT NOT NULL,
+        learning_goal TEXT,
+        profile_snapshot TEXT NOT NULL,
+        recommendation_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'completed',
+        FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+        FOREIGN KEY (domain_id) REFERENCES domains(id)
+    );
+    """)
+
+    # Migration check for existing databases
+    cursor.execute("PRAGMA table_info(knowledge_topics);")
+    cols = [row[1] for row in cursor.fetchall()]
+    if "domain_id" not in cols:
+        cursor.execute("ALTER TABLE knowledge_topics ADD COLUMN domain_id TEXT NOT NULL DEFAULT 'python';")
 
     conn.commit()
     conn.close()

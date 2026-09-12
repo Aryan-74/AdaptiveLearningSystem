@@ -1,12 +1,18 @@
 import json
 import uuid
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from db import get_db, init_db
 from seed_data import seed_database
 from profiling_engine import process_survey_responses, process_baseline_attempt
+from services.knowledge_service import get_all_domains, get_domain_by_id
+from services.recommendation_service import (
+    generate_learning_recommendation,
+    get_latest_recommendation,
+    get_recommendation_history
+)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -204,6 +210,13 @@ def test():
         session['last_attempt_id'] = attempt_id
         session.pop('current_attempt_id', None)
 
+        # Regenerate recommendation for the current test domain so recommendations reflect new scores immediately
+        try:
+            from services.recommendation_service import generate_learning_recommendation
+            generate_learning_recommendation(student_id, "python")
+        except Exception as e:
+            app.logger.warning(f"Failed to auto-generate recommendation after test: {e}")
+
         flash("Baseline knowledge assessment completed!", "success")
         return redirect(url_for('test_results'))
 
@@ -315,6 +328,54 @@ def retake_test():
     session['current_step'] = 'knowledge_test'
     flash("New baseline test attempt started.", "info")
     return redirect(url_for('test'))
+
+@app.route('/recommendations')
+@login_required
+def recommendations_page():
+    domains = [d.to_dict() for d in get_all_domains()]
+    selected_domain = request.args.get('domain_id', 'python')
+    return render_template('recommendations.html', domains=domains, selected_domain=selected_domain)
+
+@app.route('/api/domains', methods=['GET'])
+def api_domains():
+    domains = [d.to_dict() for d in get_all_domains()]
+    return jsonify({"domains": domains})
+
+@app.route('/api/recommendations/generate', methods=['POST'])
+@login_required
+def api_generate_recommendation():
+    try:
+        student_id = session['student_id']
+        data = request.get_json(silent=True) or {}
+        domain_id = data.get('domain_id', 'python')
+        learning_goal = data.get('learning_goal')
+
+        rec = generate_learning_recommendation(student_id, domain_id, learning_goal)
+        return jsonify({"success": True, "recommendation": rec})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/recommendations/latest', methods=['GET'])
+@login_required
+def api_latest_recommendation():
+    try:
+        student_id = session['student_id']
+        domain_id = request.args.get('domain_id', 'python')
+        rec = get_latest_recommendation(student_id, domain_id)
+        return jsonify({"success": True, "recommendation": rec})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+@app.route('/api/recommendations/history', methods=['GET'])
+@login_required
+def api_recommendation_history():
+    try:
+        student_id = session['student_id']
+        domain_id = request.args.get('domain_id')
+        history = get_recommendation_history(student_id, domain_id)
+        return jsonify({"success": True, "history": history})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
