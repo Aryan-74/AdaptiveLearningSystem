@@ -12,7 +12,20 @@ def seed_database():
     cursor.execute("DELETE FROM knowledge_questions;")
     cursor.execute("DELETE FROM knowledge_components;")
     cursor.execute("DELETE FROM knowledge_topics;")
+    cursor.execute("DELETE FROM domains;")
     cursor.execute("PRAGMA foreign_keys = ON;")
+
+    # 0. SEED DOMAINS
+    domains = [
+        ("python", "Python Programming", "Programming using the Python language"),
+        ("mathematics", "Mathematics", "Fundamental and advanced mathematical concepts"),
+        ("physics", "Physics", "Fundamental physics principles, mechanics, and thermodynamics")
+    ]
+    for did, dname, ddesc in domains:
+        cursor.execute(
+            "INSERT INTO domains (id, name, description) VALUES (?, ?, ?);",
+            (did, dname, ddesc)
+        )
 
     # 1. SEED SURVEY QUESTIONS (24 domain-agnostic questions total)
     survey_questions = [
@@ -73,24 +86,38 @@ def seed_database():
 
     # 2. SEED KNOWLEDGE TOPICS
     topics = [
-        ("variables", "Variables", "Storing, naming, and reassigning data values in memory"),
-        ("data_types", "Data Types", "Primitive and dynamic type system (int, float, str, bool)"),
-        ("operators", "Operators", "Arithmetic, comparison, logical, and assignment operators"),
-        ("conditions", "Conditions", "Conditional branching using if, elif, and else statements"),
-        ("loops", "Loops", "Iterative execution using for loops and while loops"),
-        ("functions", "Functions", "Defining reusable logic, parameters, arguments, and return values"),
-        ("lists", "Lists", "Ordered, mutable sequential data structures"),
-        ("dictionaries", "Dictionaries", "Key-value pair associative mappings")
+        # Python Programming
+        ("variables", "python", "Variables", "Storing, naming, and reassigning data values in memory"),
+        ("data_types", "python", "Data Types", "Primitive and dynamic type system (int, float, str, bool)"),
+        ("operators", "python", "Operators", "Arithmetic, comparison, logical, and assignment operators"),
+        ("conditions", "python", "Conditions", "Conditional branching using if, elif, and else statements"),
+        ("loops", "python", "Loops", "Iterative execution using for loops and while loops"),
+        ("functions", "python", "Functions", "Defining reusable logic, parameters, arguments, and return values"),
+        ("lists", "python", "Lists", "Ordered, mutable sequential data structures"),
+        ("dictionaries", "python", "Dictionaries", "Key-value pair associative mappings"),
+
+        # Mathematics
+        ("linear_algebra", "mathematics", "Linear Algebra", "Vector spaces, matrices, linear transformations, and system solving"),
+        ("calculus", "mathematics", "Calculus", "Limits, derivatives, integrals, and differential equations"),
+        ("probability_stats", "mathematics", "Probability & Statistics", "Probability distributions, hypothesis testing, and statistical inference"),
+        ("discrete_math", "mathematics", "Discrete Mathematics", "Logic, sets, relations, graph theory, and combinatorics"),
+
+        # Physics
+        ("classical_mechanics", "physics", "Classical Mechanics", "Newton's laws of motion, momentum, energy conservation, and kinematics"),
+        ("thermodynamics", "physics", "Thermodynamics", "Heat, work, laws of thermodynamics, entropy, and thermal physics"),
+        ("electromagnetism", "physics", "Electromagnetism", "Electric fields, magnetic forces, circuits, and Maxwell's equations"),
+        ("quantum_physics", "physics", "Quantum Physics", "Wave-particle duality, Schrödinger equation, and atomic structure")
     ]
 
-    for tid, tname, tdesc in topics:
+    for tid, did, tname, tdesc in topics:
         cursor.execute(
-            "INSERT INTO knowledge_topics (topic_id, topic_name, description) VALUES (?, ?, ?)",
-            (tid, tname, tdesc)
+            "INSERT INTO knowledge_topics (topic_id, domain_id, topic_name, description) VALUES (?, ?, ?, ?)",
+            (tid, did, tname, tdesc)
         )
 
     # 3. SEED KNOWLEDGE COMPONENTS (KCs)
     kcs = [
+        # Python KCs
         ("kc_var_assignment", "variables", "Variable Assignment", "Assigning values to variable names and re-assignment"),
         ("kc_var_scope", "variables", "Variable Naming & Scope", "Valid variable names, case-sensitivity, and basic scope"),
         
@@ -113,7 +140,19 @@ def seed_database():
         ("kc_list_indexing", "lists", "List Indexing & Iteration", "Accessing elements by 0-based index and looping through lists"),
         
         ("kc_dict_access", "dictionaries", "Dictionary Access & Modification", "Key lookup, value updates, and adding new keys"),
-        ("kc_dict_iteration", "dictionaries", "Dictionary Iteration", "Looping through dict keys, values, and .items()")
+        ("kc_dict_iteration", "dictionaries", "Dictionary Iteration", "Looping through dict keys, values, and .items()"),
+
+        # Mathematics KCs
+        ("kc_matrix_ops", "linear_algebra", "Matrix Operations", "Matrix addition, scalar multiplication, and matrix multiplication"),
+        ("kc_eigenvalues", "linear_algebra", "Eigenvalues & Eigenvectors", "Characteristic equations and linear transformation axes"),
+        ("kc_derivatives", "calculus", "Derivatives & Chain Rule", "Rates of change, differentiation rules, and optimization"),
+        ("kc_integrals", "calculus", "Integrals & Fundamental Theorem", "Definite and indefinite integrals, area under curves"),
+
+        # Physics KCs
+        ("kc_kinematics", "classical_mechanics", "Kinematics Equations", "Displacement, velocity, acceleration, and projectile motion"),
+        ("kc_newton_laws", "classical_mechanics", "Newtonian Dynamics", "Forces, free-body diagrams, friction, and tension"),
+        ("kc_first_law_thermo", "thermodynamics", "First Law of Thermodynamics", "Internal energy, heat exchange, and work done by gas"),
+        ("kc_circuits", "electromagnetism", "DC Electric Circuits", "Ohm's law, Kirchhoff's voltage/current laws, and resistance")
     ]
 
     for kcid, tid, kname, kdesc in kcs:
@@ -297,7 +336,89 @@ def seed_database():
 
     conn.commit()
     conn.close()
-    print("Database successfully seeded with survey questions, topics, KCs, and baseline question bank.")
+
+    # 5. SEED COMPLETED DEMO ADMIN USER FOR TESTING
+    seed_demo_admin_user()
+    print("Database successfully seeded with survey questions, topics, KCs, baseline questions, and demo admin account.")
+
+def seed_demo_admin_user():
+    from werkzeug.security import generate_password_hash
+    from profiling_engine import process_survey_responses, process_baseline_attempt
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    student_id = "STU-ADMIN01"
+    email = "admin@example.com"
+    name = "Demo Admin Student"
+    pwd_hash = generate_password_hash("admin123")
+
+    # Insert or update student
+    cursor.execute("""
+        INSERT INTO students (student_id, name, email, password_hash, current_step)
+        VALUES (?, ?, ?, ?, 'completed')
+        ON CONFLICT(student_id) DO UPDATE SET
+            name=excluded.name,
+            email=excluded.email,
+            password_hash=excluded.password_hash,
+            current_step='completed';
+    """, (student_id, name, email, pwd_hash))
+    conn.commit()
+    conn.close()
+
+    # Seed 24 Survey Responses
+    survey_responses = {
+        "VARK_V1": 5, "VARK_V2": 4, # Visual = 0.875
+        "VARK_A1": 2, "VARK_A2": 3, # Aural = 0.375
+        "VARK_R1": 4, "VARK_R2": 4, # Read/Write = 0.75
+        "VARK_K1": 1, "VARK_K2": 2, # Kinesthetic = 0.125
+        "MOT_INT1": 5, "MOT_INT2": 5, # Intrinsic = 1.0
+        "MOT_EXT1": 3, "MOT_EXT2": 3, # Extrinsic = 0.5
+        "MOT_LGO1": 4, "MOT_LGO2": 4, # LGO = 0.75
+        "MOT_TV1": 5, "MOT_TV2": 4,  # Task Value = 0.875
+        "SR_GS1": 4, "SR_GS2": 4,    # Goal Setting = 0.75
+        "SR_PL1": 3, "SR_PL2": 3,    # Planning = 0.50
+        "SR_SM1": 5, "SR_SM2": 5,    # Self Monitoring = 1.0
+        "SR_RB1": 2, "SR_RB2": 3     # Revision = 0.375
+    }
+    process_survey_responses(student_id, survey_responses)
+
+    # Seed Baseline Test Attempt
+    attempt_id = "ATT-ADMIN01"
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO baseline_attempts (attempt_id, student_id)
+        VALUES (?, ?);
+    """, (attempt_id, student_id))
+
+    cursor.execute("SELECT question_id, correct_answer FROM knowledge_questions;")
+    questions = cursor.fetchall()
+    conn.commit()
+    conn.close()
+
+    test_responses = []
+    # Seed dynamic performance: high on variables/lists, medium on data_types/functions, low on conditions/dictionaries/operators
+    wrong_qids = {"Q_OP_2", "Q_OP_3", "Q_COND_1", "Q_COND_2", "Q_COND_3", "Q_LOOP_2", "Q_LOOP_3", "Q_DICT_1", "Q_DICT_2", "Q_DICT_3", "Q_DT_3"}
+
+    for q in questions:
+        qid = q["question_id"]
+        ans = q["correct_answer"] if qid not in wrong_qids else "WRONG_ANSWER"
+        test_responses.append({
+            "question_id": qid,
+            "selected_answer": ans,
+            "response_time_seconds": 14.5
+        })
+
+    process_baseline_attempt(student_id, attempt_id, test_responses)
+
+    # Generate initial AI recommendations for Python, Math, Physics for admin user
+    try:
+        from services.recommendation_service import generate_learning_recommendation
+        for d in ["python", "mathematics", "physics"]:
+            generate_learning_recommendation(student_id, d)
+    except Exception as e:
+        pass
 
 if __name__ == "__main__":
     seed_database()
