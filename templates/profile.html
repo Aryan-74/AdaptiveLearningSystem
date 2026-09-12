@@ -1,0 +1,254 @@
+{% extends "layout.html" %}
+{% block title %}Student Profile Dashboard{% endblock %}
+
+{% block content %}
+<div class="py-2">
+    <!-- Student Header Summary -->
+    <div class="card card-custom p-4 mb-4 bg-white">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between">
+            <div class="d-flex align-items-center mb-3 mb-md-0">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 60px; height: 60px;">
+                    <i class="fa-solid fa-id-badge fs-3"></i>
+                </div>
+                <div>
+                    <h3 class="section-title mb-1">{{ student.name }}</h3>
+                    <p class="text-muted small mb-0">
+                        <i class="fa-regular fa-envelope me-1"></i> {{ student.email }} &bull; 
+                        <i class="fa-solid fa-hashtag me-1"></i> ID: <code>{{ student.student_id }}</code>
+                    </p>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <form action="{{ url_for('retake_test') }}" method="POST" class="d-inline">
+                    <button type="submit" class="btn btn-outline-primary rounded-pill px-3 py-2 small font-weight-medium">
+                        <i class="fa-solid fa-rotate-right me-1"></i> Retake Baseline Test
+                    </button>
+                </form>
+                <a href="{{ url_for('survey') }}" class="btn btn-outline-secondary rounded-pill px-3 py-2 small font-weight-medium">
+                    <i class="fa-solid fa-pen-to-square me-1"></i> Retake Learner Survey
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- DUAL COMPONENT PROFILE GRID -->
+    <div class="row g-4">
+        
+        <!-- COMPONENT 1: Psychological / Learner Characteristics Profile -->
+        <div class="col-lg-6">
+            <div class="card card-custom h-100 p-4">
+                <div class="profile-section-header">
+                    <span class="badge bg-primary px-2 py-1 mb-1">Self-Reported Persona</span>
+                    <h4 class="section-title mb-0">1. Psychological / Learner Characteristics Profile</h4>
+                </div>
+
+                <div class="derivation-callout mb-4">
+                    <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                    <strong>Source & Derivation:</strong> Extracted directly from student Likert responses on the 24-item VARK + Motivation + Self-Regulation survey. Continuous scores range from 0.00 (min) to 1.00 (max).
+                </div>
+
+                <!-- 1A. VARK Modality Preferences -->
+                <div class="mb-4">
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-palette text-primary me-2"></i> VARK Learning Preferences
+                    </h5>
+                    <div class="text-muted small mb-3">
+                        <em>Continuous preference dimensions (Not rigid modality labels):</em>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="p-3 border rounded-3 bg-light text-center">
+                                <span class="badge badge-vark-v font-weight-bold mb-1">Visual</span>
+                                <h4 class="font-weight-bold mb-0 text-slate-800">{{ "%.2f"|format(psycho.vark_visual) }}</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 border rounded-3 bg-light text-center">
+                                <span class="badge badge-vark-a font-weight-bold mb-1">Aural</span>
+                                <h4 class="font-weight-bold mb-0 text-slate-800">{{ "%.2f"|format(psycho.vark_aural) }}</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 border rounded-3 bg-light text-center">
+                                <span class="badge badge-vark-r font-weight-bold mb-1">Read / Write</span>
+                                <h4 class="font-weight-bold mb-0 text-slate-800">{{ "%.2f"|format(psycho.vark_read_write) }}</h4>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 border rounded-3 bg-light text-center">
+                                <span class="badge badge-vark-k font-weight-bold mb-1">Kinesthetic</span>
+                                <h4 class="font-weight-bold mb-0 text-slate-800">{{ "%.2f"|format(psycho.vark_kinesthetic) }}</h4>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="height: 220px;" class="mb-3">
+                        <canvas id="varkRadarChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 1B. Motivation Subscales -->
+                <div class="mb-4">
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-fire text-danger me-2"></i> Academic Motivation Subscales
+                    </h5>
+                    <div class="row g-2 text-slate-700 small">
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Intrinsic Motivation</span><strong>{{ "%.2f"|format(psycho.intrinsic_motivation) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-primary" style="width: {{ psycho.intrinsic_motivation * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Extrinsic Motivation</span><strong>{{ "%.2f"|format(psycho.extrinsic_motivation) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-primary" style="width: {{ psycho.extrinsic_motivation * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Goal Orientation</span><strong>{{ "%.2f"|format(psycho.learning_goal_orientation) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-primary" style="width: {{ psycho.learning_goal_orientation * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Task Value</span><strong>{{ "%.2f"|format(psycho.task_value) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-primary" style="width: {{ psycho.task_value * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1C. Self-Regulation Subscales -->
+                <div>
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-sliders text-success me-2"></i> Self-Regulation Subscales
+                    </h5>
+                    <div class="row g-2 text-slate-700 small">
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Goal Setting</span><strong>{{ "%.2f"|format(psycho.goal_setting) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-info" style="width: {{ psycho.goal_setting * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Planning</span><strong>{{ "%.2f"|format(psycho.planning) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-info" style="width: {{ psycho.planning * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Self-Monitoring</span><strong>{{ "%.2f"|format(psycho.self_monitoring) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-info" style="width: {{ psycho.self_monitoring * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-2 border rounded bg-light">
+                                <div class="d-flex justify-content-between mb-1"><span>Revision Behavior</span><strong>{{ "%.2f"|format(psycho.revision_behavior) }}</strong></div>
+                                <div class="progress" style="height: 5px;"><div class="progress-bar bg-info" style="width: {{ psycho.revision_behavior * 100 }}%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COMPONENT 2: Knowledge Profile -->
+        <div class="col-lg-6">
+            <div class="card card-custom h-100 p-4">
+                <div class="profile-section-header" style="border-left-color: #10b981;">
+                    <span class="badge bg-success px-2 py-1 mb-1">Empirically Observed Mastery</span>
+                    <h4 class="section-title mb-0">2. Knowledge Profile</h4>
+                </div>
+
+                <div class="derivation-callout mb-4" style="border-left-color: #10b981;">
+                    <i class="fa-solid fa-chart-line text-success me-1"></i>
+                    <strong>Source & Derivation:</strong> Computed from student baseline test attempt (Attempt ID: <code>{{ attempt.attempt_id if attempt else 'N/A' }}</code>). Accuracy = (Correct Answers / Total Questions).
+                </div>
+
+                {% if knowledge %}
+                <!-- 2A. Overall Python Mastery -->
+                <div class="mb-4">
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-gauge-high text-success me-2"></i> Overall Python Performance
+                    </h5>
+                    <div class="p-3 border rounded-3 bg-light d-flex align-items-center justify-content-between">
+                        <div>
+                            <h2 class="font-weight-bold text-success mb-0">{{ "%.1f"|format(knowledge.overall_performance * 100) }}%</h2>
+                            <span class="text-slate-500 small">Baseline Accuracy Score</span>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge bg-dark px-3 py-2 fs-6 mb-1 d-block">{{ attempt.correct_count }} / {{ attempt.total_questions }} Correct</span>
+                            <span class="text-muted small">Attempt timestamp: {{ attempt.completed_at }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2B. Topic-wise Performance -->
+                <div class="mb-4">
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-code text-primary me-2"></i> Topic-wise Performance
+                    </h5>
+                    <div style="height: 220px;" class="mb-3">
+                        <canvas id="topicPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 2C. Knowledge Component (KC) Performance -->
+                <div>
+                    <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                        <i class="fa-solid fa-diagram-project text-info me-2"></i> Knowledge Component (KC) Mastery
+                    </h5>
+                    <div style="height: 260px;">
+                        <canvas id="kcPerformanceChart"></canvas>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fa-solid fa-circle-exclamation text-warning fs-1 mb-3"></i>
+                    <h5>No Baseline Knowledge Test Completed Yet</h5>
+                    <p class="text-muted small">Complete the Python baseline assessment to generate your empirical Knowledge Profile.</p>
+                    <a href="{{ url_for('test') }}" class="btn btn-primary rounded-pill px-4">Take Baseline Test</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/profile_charts.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const profileData = {
+            psychological: {
+                vark_visual: {{ psycho.vark_visual if psycho else 0.0 }},
+                vark_aural: {{ psycho.vark_aural if psycho else 0.0 }},
+                vark_read_write: {{ psycho.vark_read_write if psycho else 0.0 }},
+                vark_kinesthetic: {{ psycho.vark_kinesthetic if psycho else 0.0 }},
+                intrinsic_motivation: {{ psycho.intrinsic_motivation if psycho else 0.0 }},
+                extrinsic_motivation: {{ psycho.extrinsic_motivation if psycho else 0.0 }},
+                learning_goal_orientation: {{ psycho.learning_goal_orientation if psycho else 0.0 }},
+                task_value: {{ psycho.task_value if psycho else 0.0 }},
+                goal_setting: {{ psycho.goal_setting if psycho else 0.0 }},
+                planning: {{ psycho.planning if psycho else 0.0 }},
+                self_monitoring: {{ psycho.self_monitoring if psycho else 0.0 }},
+                revision_behavior: {{ psycho.revision_behavior if psycho else 0.0 }}
+            },
+            knowledge: {
+                overall_performance: {{ knowledge.overall_performance if knowledge else 0.0 }},
+                topic_scores: {{ (knowledge.topic_scores if knowledge else '{}') | safe }},
+                kc_scores: {{ (knowledge.kc_scores if knowledge else '{}') | safe }}
+            },
+            kc_names: {{ (kc_names if kc_names else '{}') | safe }}
+        };
+
+        renderStudentProfileCharts(profileData);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,151 @@
+{% extends "layout.html" %}
+{% block title %}Survey Results{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+    <div class="col-lg-10">
+        <div class="card card-custom p-4 p-md-5 mb-4">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div class="d-flex align-items-center">
+                    <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 52px; height: 52px;">
+                        <i class="fa-solid fa-check fs-4"></i>
+                    </div>
+                    <div>
+                        <h3 class="section-title mb-1">Survey Complete & Parameters Extracted</h3>
+                        <p class="text-muted mb-0">Psychological / Learner Characteristics Profile generated</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('test') }}" class="btn btn-primary rounded-3 px-4">
+                    Proceed to Baseline Test <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+
+            <div class="derivation-callout mb-4">
+                <i class="fa-solid fa-calculator me-1"></i>
+                <strong>Parameter Extraction Methodology:</strong> Raw Likert responses (1–5) were normalized to continuous values ($1 \rightarrow 0.00, 2 \rightarrow 0.25, 3 \rightarrow 0.50, 4 \rightarrow 0.75, 5 \rightarrow 1.00$). Parameter continuous scores represent the arithmetic mean of items assigned to each parameter dimension.
+            </div>
+
+            <!-- VARK Modalities -->
+            <h5 class="font-weight-bold text-slate-800 border-bottom pb-2 mb-3">
+                <i class="fa-solid fa-palette text-primary me-2"></i> VARK Continuous Preference Scores
+            </h5>
+
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6 col-md-3">
+                    <div class="p-3 border rounded-3 text-center bg-light">
+                        <div class="text-primary font-weight-bold mb-1">Visual (V)</div>
+                        <h3 class="font-weight-bold text-slate-800 mb-2">{{ "%.2f"|format(profile.vark_visual) }}</h3>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-primary" role="progressbar" style="width: {{ profile.vark_visual * 100 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="p-3 border rounded-3 text-center bg-light">
+                        <div class="text-purple font-weight-bold mb-1" style="color: #8b5cf6;">Aural (A)</div>
+                        <h3 class="font-weight-bold text-slate-800 mb-2">{{ "%.2f"|format(profile.vark_aural) }}</h3>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar" role="progressbar" style="width: {{ profile.vark_aural * 100 }}%; background-color: #8b5cf6;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="p-3 border rounded-3 text-center bg-light">
+                        <div class="text-success font-weight-bold mb-1">Read/Write (R)</div>
+                        <h3 class="font-weight-bold text-slate-800 mb-2">{{ "%.2f"|format(profile.vark_read_write) }}</h3>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ profile.vark_read_write * 100 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <div class="p-3 border rounded-3 text-center bg-light">
+                        <div class="text-warning font-weight-bold mb-1">Kinesthetic (K)</div>
+                        <h3 class="font-weight-bold text-slate-800 mb-2">{{ "%.2f"|format(profile.vark_kinesthetic) }}</h3>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-warning" role="progressbar" style="width: {{ profile.vark_kinesthetic * 100 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Motivation & Self-Regulation -->
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="border rounded-3 p-3 bg-light h-100">
+                        <h6 class="font-weight-bold mb-3"><i class="fa-solid fa-fire text-danger me-2"></i> Motivation Subscales</h6>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Intrinsic Motivation</span>
+                                <strong>{{ "%.2f"|format(profile.intrinsic_motivation) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-indigo" style="width: {{ profile.intrinsic_motivation * 100 }}%; background-color: #4f46e5;"></div></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Extrinsic Motivation</span>
+                                <strong>{{ "%.2f"|format(profile.extrinsic_motivation) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-indigo" style="width: {{ profile.extrinsic_motivation * 100 }}%; background-color: #4f46e5;"></div></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Learning Goal Orientation</span>
+                                <strong>{{ "%.2f"|format(profile.learning_goal_orientation) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-indigo" style="width: {{ profile.learning_goal_orientation * 100 }}%; background-color: #4f46e5;"></div></div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Task Value</span>
+                                <strong>{{ "%.2f"|format(profile.task_value) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-indigo" style="width: {{ profile.task_value * 100 }}%; background-color: #4f46e5;"></div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="border rounded-3 p-3 bg-light h-100">
+                        <h6 class="font-weight-bold mb-3"><i class="fa-solid fa-sliders text-success me-2"></i> Self-Regulation Subscales</h6>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Goal Setting</span>
+                                <strong>{{ "%.2f"|format(profile.goal_setting) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-info" style="width: {{ profile.goal_setting * 100 }}%;"></div></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Planning</span>
+                                <strong>{{ "%.2f"|format(profile.planning) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-info" style="width: {{ profile.planning * 100 }}%;"></div></div>
+                        </div>
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Self-Monitoring</span>
+                                <strong>{{ "%.2f"|format(profile.self_monitoring) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-info" style="width: {{ profile.self_monitoring * 100 }}%;"></div></div>
+                        </div>
+                        <div>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Revision Behavior</span>
+                                <strong>{{ "%.2f"|format(profile.revision_behavior) }}</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;"><div class="progress-bar bg-info" style="width: {{ profile.revision_behavior * 100 }}%;"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end border-top pt-3">
+                <a href="{{ url_for('test') }}" class="btn btn-primary btn-lg rounded-3 px-4">
+                    Continue to Baseline Knowledge Test <i class="fa-solid fa-arrow-right ms-2"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

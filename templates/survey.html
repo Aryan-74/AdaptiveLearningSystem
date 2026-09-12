@@ -1,0 +1,88 @@
+{% extends "layout.html" %}
+{% block title %}Learner Survey{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-2">
+    <div class="col-lg-10">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <div>
+                <h3 class="section-title mb-1">Learner Characteristics Survey</h3>
+                <p class="text-muted mb-0">Part 1 of 2: Self-Reported Study Preferences & Self-Regulation</p>
+            </div>
+            <span class="badge bg-primary px-3 py-2 fs-6">24 Items</span>
+        </div>
+
+        <div class="alert alert-light border rounded-3 mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fa-solid fa-lightbulb text-warning fs-4 me-3"></i>
+                <small class="text-slate-600">
+                    Rate each statement on a scale of <strong>1 (Strongly Disagree)</strong> to <strong>5 (Strongly Agree)</strong>. There are no right or wrong answers. Responses will generate your continuous VARK and psychological profile.
+                </small>
+            </div>
+        </div>
+
+        <form action="{{ url_for('survey') }}" method="POST">
+            {% for category_name, questions in categorized_questions.items() %}
+            <div class="card card-custom mb-4">
+                <div class="card-custom-header d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0 font-weight-bold text-slate-800">
+                        {% if category_name == 'VARK' %}
+                            <i class="fa-solid fa-palette text-primary me-2"></i> VARK-Inspired Learning Preferences
+                        {% elif category_name == 'Motivation' %}
+                            <i class="fa-solid fa-fire text-danger me-2"></i> Academic Motivation Dimensions
+                        {% else %}
+                            <i class="fa-solid fa-sliders text-success me-2"></i> Self-Regulation & Metacognitive Strategies
+                        {% endif %}
+                    </h5>
+                    <span class="text-muted small">{{ questions|length }} Questions</span>
+                </div>
+
+                <div class="card-body p-4">
+                    {% for q in questions %}
+                    <div class="mb-4 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <label class="form-label text-slate-800 font-weight-medium mb-0" style="font-size: 0.95rem;">
+                                <span class="text-primary font-weight-bold me-1">Q{{ loop.index }}.</span> {{ q.question_text }}
+                            </label>
+                            <span class="badge bg-light text-slate-500 border ms-2" style="font-size: 0.75rem;">
+                                {{ q.parameter.replace('_', ' ').title() }}
+                            </span>
+                        </div>
+
+                        <div class="likert-group">
+                            <div class="likert-btn">
+                                <input type="radio" id="{{ q.question_id }}_1" name="{{ q.question_id }}" value="1" required>
+                                <label for="{{ q.question_id }}_1">1<br><span style="font-size:0.65rem; font-weight:normal;">Strongly Disagree</span></label>
+                            </div>
+                            <div class="likert-btn">
+                                <input type="radio" id="{{ q.question_id }}_2" name="{{ q.question_id }}" value="2">
+                                <label for="{{ q.question_id }}_2">2<br><span style="font-size:0.65rem; font-weight:normal;">Disagree</span></label>
+                            </div>
+                            <div class="likert-btn">
+                                <input type="radio" id="{{ q.question_id }}_3" name="{{ q.question_id }}" value="3">
+                                <label for="{{ q.question_id }}_3">3<br><span style="font-size:0.65rem; font-weight:normal;">Neutral</span></label>
+                            </div>
+                            <div class="likert-btn">
+                                <input type="radio" id="{{ q.question_id }}_4" name="{{ q.question_id }}" value="4">
+                                <label for="{{ q.question_id }}_4">4<br><span style="font-size:0.65rem; font-weight:normal;">Agree</span></label>
+                            </div>
+                            <div class="likert-btn">
+                                <input type="radio" id="{{ q.question_id }}_5" name="{{ q.question_id }}" value="5">
+                                <label for="{{ q.question_id }}_5">5<br><span style="font-size:0.65rem; font-weight:normal;">Strongly Agree</span></label>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+
+            <div class="d-flex justify-content-end mb-5">
+                <button type="submit" class="btn btn-primary btn-lg px-5 rounded-3 shadow">
+                    Submit Survey & Extract Parameters <i class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

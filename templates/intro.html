@@ -1,0 +1,81 @@
+{% extends "layout.html" %}
+{% block title %}Profiling Overview{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center py-3">
+    <div class="col-lg-10">
+        <div class="card card-custom p-4 p-md-5 mb-4">
+            <div class="d-flex align-items-center mb-4">
+                <div class="bg-primary text-white rounded-3 p-3 me-3">
+                    <i class="fa-solid fa-compass fs-2"></i>
+                </div>
+                <div>
+                    <h2 class="section-title mb-1">Welcome to Student Profiling</h2>
+                    <p class="text-muted mb-0">Building the baseline for research-oriented adaptive learning</p>
+                </div>
+            </div>
+
+            <p class="lead text-slate-700">
+                To tailor your future educational experience, our system captures two fundamental dimensions of your learning persona:
+            </p>
+
+            <div class="row g-4 my-2">
+                <!-- Dimension 1: Psychological Profile -->
+                <div class="col-md-6">
+                    <div class="border rounded-3 p-4 h-100 bg-light">
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="badge bg-primary fs-6 me-2"><i class="fa-solid fa-brain"></i> Part 1</span>
+                            <h5 class="mb-0 font-weight-bold">Learner Characteristics Profile</h5>
+                        </div>
+                        <p class="small text-slate-600 mb-3">
+                            Measures self-reported learning preferences and study behaviors:
+                        </p>
+                        <ul class="small text-slate-700 mb-0 ps-3">
+                            <li class="mb-2"><strong>VARK-inspired Modalities:</strong> Visual, Aural, Read/Write, and Kinesthetic continuous preference dimensions (0.0 to 1.0 continuous scale).</li>
+                            <li class="mb-2"><strong>Motivation:</strong> Intrinsic, extrinsic, goal orientation, and task value.</li>
+                            <li><strong>Self-Regulation:</strong> Goal setting, planning, self-monitoring, and revision practices.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Dimension 2: Knowledge Profile -->
+                <div class="col-md-6">
+                    <div class="border rounded-3 p-4 h-100 bg-light">
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="badge bg-success fs-6 me-2"><i class="fa-solid fa-code"></i> Part 2</span>
+                            <h5 class="mb-0 font-weight-bold">Python Baseline Knowledge</h5>
+                        </div>
+                        <p class="small text-slate-600 mb-3">
+                            Empirically assesses your current Python programming mastery:
+                        </p>
+                        <ul class="small text-slate-700 mb-0 ps-3">
+                            <li class="mb-2"><strong>8 Core Python Topics:</strong> Variables, Data Types, Operators, Conditions, Loops, Functions, Lists, Dictionaries.</li>
+                            <li class="mb-2"><strong>Knowledge Components (KCs):</strong> Granular skill sub-components (e.g., <em>for loops</em> vs <em>while loops</em>, <em>list indexing</em>).</li>
+                            <li><strong>Interaction Telemetry:</strong> Tracks response accuracy, time spent, and question difficulty.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-info border-0 rounded-3 mt-4 mb-4" role="alert">
+                <div class="d-flex">
+                    <i class="fa-solid fa-circle-info fs-4 me-3 text-info"></i>
+                    <div>
+                        <h6 class="alert-heading font-weight-bold mb-1">Methodological Separation Principle</h6>
+                        <small>
+                            Your <strong>Psychological Profile</strong> represents self-reported preferences, whereas your <strong>Knowledge Profile</strong> reflects empirically observed baseline test performance. These profiles are maintained separately and transparently.
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                <span class="text-muted small">Estimated time: 10–15 minutes total</span>
+                <a href="{{ url_for('survey') }}" class="btn btn-primary btn-lg px-4 rounded-3">
+                    Begin Learner Survey <i class="fa-solid fa-arrow-right ms-2"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
