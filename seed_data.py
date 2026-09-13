@@ -416,7 +416,7 @@ def seed_demo_admin_user():
     try:
         from services.recommendation_service import generate_learning_recommendation
         for d in ["python", "mathematics", "physics"]:
-            generate_learning_recommendation(student_id, d)
+            generate_learning_recommendation(student_id, d, force_mock=True)
     except Exception as e:
         pass
 

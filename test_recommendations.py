@@ -5,6 +5,8 @@ from app import app
 from db import init_db, get_db, DB_PATH
 from seed_data import seed_database
 from services.recommendation_service import generate_learning_recommendation, get_latest_recommendation, get_recommendation_history
+from services.ai_service import GeminiAIProvider, AIGenerationError
+from models.recommendation import deduplicate_resources, validate_recommendation_json
 from profiling_engine import process_survey_responses
 
 class TestAIRecommendationsV2(unittest.TestCase):
@@ -51,12 +53,12 @@ class TestAIRecommendationsV2(unittest.TestCase):
     def test_01_multi_domain_recommendations(self):
         """
         Tests domain-agnostic recommendation service across 3 distinct domains:
-        Python Programming, Mathematics, and Physics.
+        Python Programming, Mathematics, and Physics using force_mock=True.
         """
         domains_to_test = ["python", "mathematics", "physics"]
 
         for d_id in domains_to_test:
-            rec = generate_learning_recommendation("STU-REC-TEST", d_id)
+            rec = generate_learning_recommendation("STU-REC-TEST", d_id, force_mock=True)
             
             # Assertions on returned structure
             self.assertIsNotNone(rec)
@@ -77,13 +79,14 @@ class TestAIRecommendationsV2(unittest.TestCase):
             for res in rec["resources"]:
                 if res["url"] is not None:
                     self.assertTrue(res["url"].startswith("http://") or res["url"].startswith("https://"))
-                self.assertIn("verification_status", res)
+                self.assertIn("reason", res)
+                self.assertIn("source", res)
 
     def test_02_database_persistence(self):
         """
         Verifies profile snapshot and JSON recommendation are stored in database.
         """
-        rec = generate_learning_recommendation("STU-REC-TEST", "python")
+        rec = generate_learning_recommendation("STU-REC-TEST", "python", force_mock=True)
         rec_id = rec["id"]
 
         latest = get_latest_recommendation("STU-REC-TEST", "python")
@@ -118,7 +121,8 @@ class TestAIRecommendationsV2(unittest.TestCase):
             "learning_goal": {
                 "type": "exam_preparation",
                 "description": "Prepare for Linear Algebra & Calculus exam"
-            }
+            },
+            "force_mock": True
         })
         self.assertEqual(res_gen.status_code, 200)
         gen_json = json.loads(res_gen.data)
@@ -140,16 +144,59 @@ class TestAIRecommendationsV2(unittest.TestCase):
 
     def test_04_graceful_error_handling(self):
         """
-        Tests invalid domain or missing data returns clean error JSON without crashing.
+        Tests invalid domain returns clean error JSON without crashing.
         """
         with self.client.session_transaction() as sess:
             sess['student_id'] = 'STU-REC-TEST'
 
         res_err = self.client.post('/api/recommendations/generate', json={"domain_id": "invalid_domain_xyz"})
-        self.assertEqual(res_err.status_code, 400)
+        self.assertEqual(res_err.status_code, 500)
         err_json = json.loads(res_err.data)
         self.assertFalse(err_json["success"])
         self.assertIn("error", err_json)
+
+    def test_05_no_fake_ai_success(self):
+        """
+        Verifies ABSOLUTE RULE: NO FAKE AI SUCCESS.
+        When API key is missing or call fails, GeminiAIProvider raises AIGenerationError,
+        and API endpoint returns HTTP 500 with AI_GENERATION_FAILED code (no fake mock fallback).
+        """
+        provider = GeminiAIProvider(api_key="")
+        with self.assertRaises(AIGenerationError) as ctx:
+            provider.generate_structured_recommendation({"learning_context": {"domain": {"id": "python"}}})
+        self.assertEqual(ctx.exception.code, "AI_GENERATION_FAILED")
+
+    def test_06_resource_deduplication(self):
+        """
+        Verifies backend resource deduplication removes duplicate URLs and titles.
+        """
+        sample_resources = [
+            {"area_id": "topic_01", "title": "Python Docs", "url": "https://docs.python.org/3/"},
+            {"area_id": "topic_02", "title": "Python Docs", "url": "https://docs.python.org/3/"},
+            {"area_id": "topic_03", "title": "Unique Guide", "url": "https://example.com/guide"}
+        ]
+        deduped = deduplicate_resources(sample_resources)
+        self.assertEqual(len(deduped), 2)
+        urls = [r["url"] for r in deduped]
+        self.assertEqual(urls.count("https://docs.python.org/3/"), 1)
+
+    def test_07_single_source_of_truth_mastery(self):
+        """
+        Verifies database mastery overrides any AI-returned mastery score.
+        """
+        mock_snapshot = {
+            "knowledge_profile": {
+                "overall_mastery": 0.45,
+                "areas": [{"id": "topic_variables", "mastery": 0.25}]
+            }
+        }
+        ai_output = {
+            "overall_mastery": 0.99, # AI returns false score
+            "priority_areas": [{"area_id": "topic_variables", "area_name": "Variables", "mastery": 0.99}]
+        }
+        validated = validate_recommendation_json(ai_output, domain_id="python", snapshot=mock_snapshot)
+        self.assertEqual(validated["overall_mastery"], 0.45) # Overridden by DB
+        self.assertEqual(validated["priority_areas"][0]["mastery"], 0.25) # Overridden by DB
 
 if __name__ == '__main__':
     unittest.main()

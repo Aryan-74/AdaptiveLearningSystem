@@ -77,10 +77,10 @@ def get_knowledge_profile(student_id: str, domain_id: str) -> KnowledgeProfile:
 
     if not row:
         area_scores = [
-            KnowledgeAreaScore(id=tid, name=tname, type="topic", mastery=0.0)
+            KnowledgeAreaScore(id=tid, name=tname, type="topic", mastery=None)
             for tid, tname in topic_map.items()
         ] + [
-            KnowledgeAreaScore(id=kcid, name=kname, type="concept", mastery=0.0)
+            KnowledgeAreaScore(id=kcid, name=kname, type="concept", mastery=None)
             for kcid, kname in kc_map.items()
         ]
         return KnowledgeProfile(domain_id=domain_id, overall_mastery=0.0, areas=area_scores)
@@ -97,15 +97,18 @@ def get_knowledge_profile(student_id: str, domain_id: str) -> KnowledgeProfile:
             m = float(t_scores[tid])
             domain_topic_masteries.append(m)
         else:
-            m = 0.0
+            m = None
         area_scores.append(KnowledgeAreaScore(id=tid, name=tname, type="topic", mastery=m))
 
     # Include KCs belonging to this domain
     for kcid, kname in kc_map.items():
-        m = float(k_scores.get(kcid, 0.0))
+        if kcid in k_scores:
+            m = float(k_scores[kcid])
+        else:
+            m = None
         area_scores.append(KnowledgeAreaScore(id=kcid, name=kname, type="concept", mastery=m))
 
-    # Compute domain-specific overall mastery if specific domain topics exist
+    # Compute domain-specific overall mastery if assessed domain topics exist
     if domain_topic_masteries:
         domain_overall = round(sum(domain_topic_masteries) / len(domain_topic_masteries), 4)
     else:
@@ -116,6 +119,19 @@ def get_knowledge_profile(student_id: str, domain_id: str) -> KnowledgeProfile:
         overall_mastery=domain_overall,
         areas=area_scores
     )
+
+def serialize_knowledge_profile(student_id: str, domain_id: str) -> Dict[str, Any]:
+    """
+    Single source of truth serialization for student knowledge profile.
+    Used across Dashboard, AI Prompt, Recommendation Generation, and UI.
+    """
+    return get_knowledge_profile(student_id, domain_id).to_dict()
+
+def serialize_learner_profile(student_id: str) -> Dict[str, Any]:
+    """
+    Single source of truth serialization for psychological/learner characteristics profile.
+    """
+    return get_learner_profile(student_id).to_dict()
 
 def get_student_snapshot(student_id: str, domain_id: str) -> StudentSnapshot:
     """
@@ -137,3 +153,4 @@ def get_student_snapshot(student_id: str, domain_id: str) -> StudentSnapshot:
         learner_profile=l_prof,
         knowledge_profile=k_prof
     )
+

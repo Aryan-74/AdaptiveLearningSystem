@@ -11,27 +11,37 @@ except ImportError:
     pass
 
 from models.recommendation import validate_recommendation_json
-from services.resource_service import get_verified_url_for_area
+from services.resource_service import retrieve_real_resources_for_area, validate_resource_url
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an AI-powered personalized learning recommendation engine.
+class AIGenerationError(Exception):
+    """
+    Raised when AI generation fails. Prevents fake fallback recommendations.
+    """
+    def __init__(self, message: str = "Unable to generate your personalized learning plan.", code: str = "AI_GENERATION_FAILED"):
+        super().__init__(message)
+        self.message = message
+        self.code = code
 
-You receive information about a learner, their current learning domain, their knowledge state, their learner preferences, and their available curriculum information.
+SYSTEM_PROMPT = """You are an AI-powered personalized learning recommendation engine for an Adaptive Learning System.
 
-Your task is to determine what the learner should focus on and recommend appropriate ways and resources for learning those areas.
+You receive information about a learner, their current learning domain, their assessed knowledge state (mastery levels), their learner preferences (VARK modalities, motivation, self-regulation), and their available curriculum information.
 
-The learning domain is provided dynamically. Do not assume a particular subject.
-The domain provided in the input is the authoritative context for this recommendation.
+Your task is to analyze this data and generate a structured, personalized learning recommendation plan.
 
-CRITICAL INSTRUCTIONS:
-1. Do NOT hard-code or assume subject-specific logic. Adapt all recommendation terms, strategies, and resource types to the supplied domain.
-2. Prioritize learning areas based on mastery scores, prerequisite relationships (if provided), and structural importance.
-3. Adapt HOW the learner should study based on their psychological/learner profile (VARK preferences, motivation, self-regulation).
-4. Recommend domain-appropriate resource types (e.g., programming documentation/coding exercises for code, worked problem sets/proofs for math, simulations/experiments for physics).
-5. DO NOT fabricate or hallucinate URLs. Set "url": null and "verification_status": "unverified" for suggested resources.
-6. Focus priority_areas on distinct high-level topics. Do not duplicate a parent topic and its child sub-concepts as separate priority area entries; group child sub-concepts under "sub_concepts".
-7. Return strictly VALID JSON following the specified schema without Markdown code fences or raw text wrapper.
+CRITICAL ARCHITECTURAL RULES:
+1. DOMAIN AGNOSTIC: The learning domain is provided dynamically (e.g. Python, Mathematics, Physics, etc.). Do NOT assume a specific subject. Adapt all recommendation terms, strategies, and resource types to the supplied domain context.
+2. DYNAMIC REASONING: Reason dynamically about topic priorities based on current mastery scores, prerequisite relationships, foundational importance, and the student's learning goal.
+3. NO MECHANICAL REPETITION: Do NOT use mechanical sentence templates for learning sequence approaches (e.g., do NOT repeat "Review documentation for [TOPIC] incorporating [MODALITY] learning techniques" across multiple steps). The learning approach for each area MUST vary based on the specific concept, student mastery level, learner preferences, and domain nature.
+4. RESOURCE UNIQUENESS & REALISM:
+   - Do NOT construct fake resource titles by putting the topic name into a generic template like "Comprehensive [DOMAIN] Guide: [TOPIC]".
+   - Every resource must be topic-specific and tailored to the student's need.
+   - DO NOT fabricate URLs! Set "url": null and "verification_status": "unverified" for suggested resources unless a verified URL is provided.
+   - Vary resource types naturally (e.g., Documentation, Interactive Tutorial, Worked Problems, Textbook Reference, Simulation, Video, Practice Set).
+5. VARK AS PREFERENCE SIGNAL: Treat VARK modalities as preference signals (e.g., "Your profile indicates a stronger preference for visual explanations"), NOT as rigid labels ("You are a Visual Learner").
+6. VARIABILITY IN PRACTICE ACTIVITIES: Practice recommendations MUST match the student's mastery level (e.g. low mastery = foundational practice/guided worked examples; moderate = problem solving/debugging; high = project/challenging applications).
+7. STRICT JSON SCHEMA: Return strictly VALID JSON following the specified schema without Markdown code fences or extra text wrapper.
 
 OUTPUT JSON SCHEMA:
 {
@@ -39,7 +49,7 @@ OUTPUT JSON SCHEMA:
         "id": "<domain_id>",
         "name": "<domain_name>"
     },
-    "overall_mastery": 0.54,
+    "overall_mastery": 0.0,
     "summary": "<executive summary of learning recommendation>",
     "mastered_areas": [
         {
@@ -59,7 +69,7 @@ OUTPUT JSON SCHEMA:
             "area_name": "<topic_name>",
             "mastery": 0.0,
             "priority": "very_high | high | medium | low",
-            "reason": "<why this area is prioritized>",
+            "reason": "<specific rationale for why this area is prioritized>",
             "sub_concepts": ["<sub_concept 1>", "<sub_concept 2>"],
             "prerequisites": ["<prereq_id>"],
             "recommended_approach": ["<tactic>"],
@@ -72,19 +82,17 @@ OUTPUT JSON SCHEMA:
             "area_id": "<topic_id>",
             "area_name": "<topic_name>",
             "objective": "<step objective>",
-            "approach": "<study method>",
+            "approach": "<varied study method>",
             "practice_strategy": "<practice method>"
         }
     ],
     "resources": [
         {
-            "area_id": "<topic_id>",
             "title": "<resource title>",
-            "type": "<Documentation | Worked Problems | Simulation | Video | Tutorial | Exercise | Textbook>",
-            "description": "<resource description>",
-            "url": null,
-            "why_recommended": "<why suited for student>",
-            "verification_status": "unverified"
+            "type": "Video | Documentation | Tutorial | Article | Worked Example | Exercise | Case Study | Reference",
+            "source": "<publisher or source>",
+            "url": "<verified http/https URL>",
+            "reason": "<why recommended for student>"
         }
     ],
     "practice_recommendations": [
@@ -92,7 +100,7 @@ OUTPUT JSON SCHEMA:
             "area_id": "<topic_id>",
             "activity_type": "<exercise type>",
             "description": "<activity description>",
-            "reason": "<rationale>"
+            "reason": "<rationale matching mastery level>"
         }
     ]
 }"""
@@ -104,8 +112,8 @@ class AIProvider(ABC):
 
 class MockAIProvider(AIProvider):
     """
-    Offline/Fallback AI Provider that dynamically generates domain-agnostic,
-    structured recommendations without external API dependencies.
+    Offline AI Provider used exclusively in explicit test fixtures.
+    Generates dynamic domain-agnostic recommendation structures based on input context.
     """
     def generate_structured_recommendation(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         context = input_data.get("learning_context", {})
@@ -123,11 +131,11 @@ class MockAIProvider(AIProvider):
         k_profile = student.get("knowledge_profile", {})
         overall_mastery = k_profile.get("overall_mastery", 0.0)
 
-        # Map knowledge areas from student profile or curriculum
+        # Map knowledge areas
         k_areas = k_profile.get("areas", [])
         mastery_map = {item.get("id"): item.get("mastery", 0.0) for item in k_areas}
 
-        # Group curriculum into high-level topics and collect child KCs
+        # Group curriculum into high-level topics
         topic_areas = [a for a in areas if a.get("type") == "topic"]
         if not topic_areas:
             topic_areas = areas
@@ -136,11 +144,8 @@ class MockAIProvider(AIProvider):
         for area in topic_areas:
             tid = area.get("id")
             tname = area.get("name", tid)
-            m_score = mastery_map.get(tid, 0.0)
-            
-            # Collect child concepts belonging to this topic
+            m_score = mastery_map.get(tid)
             child_kcs = [a.get("name") for a in areas if a.get("parent_id") == tid]
-            
             sorted_topics.append({
                 "id": tid,
                 "name": tname,
@@ -149,7 +154,7 @@ class MockAIProvider(AIProvider):
                 "sub_concepts": child_kcs
             })
 
-        sorted_topics.sort(key=lambda x: x["mastery"])
+        sorted_topics.sort(key=lambda x: x["mastery"] if x["mastery"] is not None else 999.0)
 
         # Determine learner approach signals
         vark = l_profile.get("vark", {})
@@ -159,27 +164,21 @@ class MockAIProvider(AIProvider):
         top_vark = max(vark.items(), key=lambda x: x[1])[0] if vark else "vark_visual"
         vark_clean = top_vark.replace("vark_", "").capitalize()
 
-        prefs_considered = []
+        prefs_considered = [f"Preference for {vark_clean} learning modality"]
         rec_approach = []
         if "visual" in top_vark.lower():
-            prefs_considered.append("Visual Learner Preference")
-            rec_approach.extend(["Incorporate diagrams, flowcharts, and visual aids", "Use visual step-by-step concept maps"])
+            rec_approach.extend(["Incorporate diagrams and visual concept maps", "Study graphical walkthroughs"])
         elif "aural" in top_vark.lower():
-            prefs_considered.append("Aural Learner Preference")
-            rec_approach.extend(["Listen to audio explanations and discussions", "Verbalize concepts and teach back aloud"])
+            rec_approach.extend(["Listen to audio explanations", "Verbalize concepts aloud"])
         elif "read" in top_vark.lower():
-            prefs_considered.append("Read/Write Learner Preference")
-            rec_approach.extend(["Read structured documentation and textbooks", "Write comprehensive notes and bullet summaries"])
+            rec_approach.extend(["Read structured documentation", "Write concise summary notes"])
         else:
-            prefs_considered.append("Kinesthetic Learner Preference")
-            rec_approach.extend(["Engage in hands-on practical exercises", "Build interactive projects and real-world experiments"])
+            rec_approach.extend(["Engage in hands-on practical exercises", "Build interactive trial applications"])
 
         if mot.get("intrinsic_motivation", 0.0) >= 0.6:
-            prefs_considered.append("High Intrinsic Motivation")
-            rec_approach.append("Explore deep conceptual reasoning and underlying principles")
+            prefs_considered.append("High intrinsic interest in underlying principles")
         if sr.get("goal_setting", 0.0) >= 0.6:
-            prefs_considered.append("Strong Goal Setting")
-            rec_approach.append("Follow structured milestone-driven learning steps")
+            prefs_considered.append("Structured goal-setting habits")
 
         # Domain-appropriate resource types mapping
         domain_lower = domain_id.lower()
@@ -192,18 +191,28 @@ class MockAIProvider(AIProvider):
         else:
             resource_types = ["Textbook Reference", "Tutorial Articles", "Practice Sets", "Educational Videos"]
 
-        # Build priority areas
         priority_areas = []
         learning_sequence = []
         resources = []
         practice_recs = []
 
+        # Distinct sequence tactics per step to avoid mechanical repetition
+        sequence_tactics = [
+            ("Foundational Overview", "Focus on core principles and worked examples"),
+            ("Guided Practice", "Solve step-by-step problem sets with hints"),
+            ("Practical Application", "Implement hands-on scenarios and edge cases"),
+            ("Synthesis & Review", "Complete comprehensive review problems and self-explanation tasks")
+        ]
+
         for idx, area in enumerate(sorted_topics[:4], start=1):
             m = area["mastery"]
-            p_level = "very_high" if m < 0.4 else ("high" if m < 0.7 else "medium")
-            reason = f"Mastery level is currently at {int(m * 100)}%. Focusing on this area establishes essential foundational competence."
+            m_num = m if m is not None else 0.5
+            p_level = "very_high" if m_num < 0.4 else ("high" if m_num < 0.7 else "medium")
+            reason = f"Current assessed mastery is {int(m_num * 100)}%. Reinforcing {area['name']} establishes essential foundational competence for subsequent topics." if m is not None else f"Reinforcing {area['name']} establishes essential foundational competence."
             if idx == 1 and goal_desc:
-                reason += f" Highly relevant for goal: '{goal_desc}'."
+                reason += f" Directly supports your goal: '{goal_desc}'."
+
+            tactic_title, tactic_desc = sequence_tactics[(idx - 1) % len(sequence_tactics)]
 
             priority_areas.append({
                 "area_id": area["id"],
@@ -213,7 +222,7 @@ class MockAIProvider(AIProvider):
                 "reason": reason,
                 "sub_concepts": area.get("sub_concepts", []),
                 "prerequisites": [],
-                "recommended_approach": rec_approach[:2],
+                "recommended_approach": [tactic_desc],
                 "recommended_resource_types": resource_types[:2]
             })
 
@@ -222,43 +231,30 @@ class MockAIProvider(AIProvider):
                 "area_id": area["id"],
                 "area_name": area["name"],
                 "objective": f"Achieve > 75% mastery in {area['name']}.",
-                "approach": f"Review {resource_types[0].lower()} for {area['name']} incorporating {vark_clean} learning techniques.",
-                "practice_strategy": f"Complete targeted {resource_types[1].lower()} focusing on core edge cases."
+                "approach": f"{tactic_title}: {tactic_desc} tailored for {area['name']}.",
+                "practice_strategy": f"Targeted practice on {area['name']} focusing on key edge cases."
             })
 
-            url_info = get_verified_url_for_area(area["id"], domain_id)
-
-            resources.append({
-                "area_id": area["id"],
-                "title": f"Comprehensive {domain_name} Guide: {area['name']}",
-                "type": resource_types[0],
-                "description": f"Structured material covering foundational concepts and key principles of {area['name']} in {domain_name}.",
-                "url": url_info["url"],
-                "why_recommended": f"Matches your {vark_clean} preference and targets your key learning gap in {area['name']}.",
-                "verification_status": url_info["verification_status"]
-            })
+            real_res = retrieve_real_resources_for_area(area["id"], domain_id)
+            if real_res:
+                resources.extend(real_res)
 
             practice_recs.append({
                 "area_id": area["id"],
                 "activity_type": resource_types[1],
-                "description": f"Solve step-by-step problem sets on {area['name']} with immediate self-monitoring feedback.",
-                "reason": f"Reinforces retention for low-mastery area ({int(m * 100)}%)."
+                "description": f"Practice activity tailored to {area['name']} with self-monitoring feedback.",
+                "reason": f"Matches assessed mastery level ({int(m_num * 100)}%)." if m is not None else "Targeted practice for core curriculum concept."
             })
 
-        # Extract Mastered Areas (strengths with mastery >= 0.7)
-        mastered_areas = []
-        for area in sorted_topics:
-            if area["mastery"] >= 0.7:
-                mastered_areas.append({
-                    "area_id": area["id"],
-                    "area_name": area["name"],
-                    "mastery": area["mastery"]
-                })
+        mastered_areas = [
+            {"area_id": a["id"], "area_name": a["name"], "mastery": a["mastery"]}
+            for a in sorted_topics if a["mastery"] is not None and a["mastery"] >= 0.7
+        ]
 
         summary_text = (
-            f"Personalized learning plan for {domain_name}. Your overall mastery is {int(overall_mastery * 100)}%. "
-            f"Based on your {vark_clean} learning modality and psychological profile, we recommend focusing on "
-            f"{len(priority_areas)} priority areas starting with {sorted_topics[0]['name'] if sorted_topics else 'foundational concepts'}."
+            f"Personalized learning plan for {domain_name}. Overall domain mastery is {int(overall_mastery * 100)}%. "
+            f"Your profile indicates a preference for {vark_clean} learning modality. "
+            f"We recommend focusing on {len(priority_areas)} priority areas starting with {sorted_topics[0]['name'] if sorted_topics else 'foundational concepts'}."
         )
 
         result = {
@@ -269,41 +265,55 @@ class MockAIProvider(AIProvider):
             "learner_approach": {
                 "preferences_considered": prefs_considered,
                 "recommended_approach": rec_approach,
-                "reason": f"Tailored strategy combining {vark_clean} presentation with your self-regulation habits."
+                "reason": f"Tailored strategy balancing {vark_clean} preference with structured self-regulation."
             },
             "priority_areas": priority_areas,
             "learning_sequence": learning_sequence,
             "resources": resources,
-            "practice_recommendations": practice_recs
+            "practice_recommendations": practice_recs,
+            "_model_name": "MockAIProvider"
         }
 
-        return validate_recommendation_json(result, domain_id)
+        return validate_recommendation_json(result, domain_id, snapshot=student, curriculum=curriculum)
 
 class GeminiAIProvider(AIProvider):
     """
-    AI Provider using Google Gemini REST API.
-    Supports model fallback across gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash.
-    Falls back to MockAIProvider if API key is missing or call fails.
+    Production AI Provider using Google Gemini REST API.
+    Supports model fallback across active models: gemini-3.6-flash, gemini-3.5-flash, gemini-flash-latest, gemini-3.1-flash-lite.
+    Enforces Strict No-Fake-AI-Success Rule: raises AIGenerationError if API key missing or calls fail.
     """
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("AI_API_KEY")
-        self.fallback = MockAIProvider()
+        # If api_key parameter is explicitly passed (even if "" or None in direct testing), respect it; otherwise read from env.
+        self.api_key = api_key if api_key is not None else (os.environ.get("GEMINI_API_KEY") or os.environ.get("AI_API_KEY"))
 
     def generate_structured_recommendation(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        domain_id = input_data.get("learning_context", {}).get("domain", {}).get("id", "general")
+        context = input_data.get("learning_context", {})
+        domain = context.get("domain", {})
+        domain_id = domain.get("id", "general")
+        student = input_data.get("student", {})
+        curriculum = context.get("curriculum", {})
+
+        logger.info(f"[AI DEBUG] Generation requested for Student ID: '{student.get('student_id', 'unknown')}'")
+        logger.info(f"[AI DEBUG] Domain: '{domain_id}', Goal: '{context.get('learning_goal', {}).get('type', 'general')}'")
+        logger.info(f"[AI DEBUG] Profile loaded: {bool(student.get('learner_profile'))}")
+        logger.info(f"[AI DEBUG] Knowledge profile loaded: {bool(student.get('knowledge_profile'))}")
 
         if not self.api_key:
-            logger.info("No Gemini/AI API key found in environment. Using MockAIProvider fallback.")
-            return self.fallback.generate_structured_recommendation(input_data)
+            logger.error("[AI DEBUG] API key configured: false. Raising AIGenerationError.")
+            raise AIGenerationError(
+                message="AI API key is not configured. Unable to generate personalized learning plan.",
+                code="AI_GENERATION_FAILED"
+            )
+
+        logger.info("[AI DEBUG] API key configured: true")
 
         models_to_try = [
-            os.environ.get("GEMINI_MODEL", "gemini-1.5-flash"),
-            "gemini-1.5-pro",
-            "gemini-2.0-flash-exp",
-            "gemini-2.5-flash"
+            os.environ.get("GEMINI_MODEL", "gemini-3.5-flash"),
+            "gemini-3.6-flash",
+            "gemini-flash-latest",
+            "gemini-3.1-flash-lite"
         ]
 
-        # De-duplicate model names while preserving order
         seen = set()
         models = [m for m in models_to_try if m and not (m in seen or seen.add(m))]
 
@@ -316,7 +326,7 @@ class GeminiAIProvider(AIProvider):
             },
             "contents": [
                 {
-                    "parts": [{"text": f"Generate a domain-agnostic personalized learning recommendation for the following input data:\n{json.dumps(input_data, indent=2)}"}]
+                    "parts": [{"text": f"Generate a personalized learning recommendation JSON for the following input data:\n{json.dumps(input_data, indent=2)}"}]
                 }
             ],
             "generationConfig": {
@@ -325,8 +335,13 @@ class GeminiAIProvider(AIProvider):
             }
         }
 
+        logger.info("[AI DEBUG] Prompt constructed: true")
+
+        last_error_msg = ""
         for model_name in models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
+            safe_endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+            logger.info(f"[AI DEBUG] Calling AI provider endpoint: {safe_endpoint}")
             try:
                 req = urllib.request.Request(
                     url,
@@ -335,38 +350,59 @@ class GeminiAIProvider(AIProvider):
                     method="POST"
                 )
 
-                with urllib.request.urlopen(req, timeout=15) as response:
+                with urllib.request.urlopen(req, timeout=30) as response:
                     res_body = response.read().decode("utf-8")
+                    res_status = response.status
+                    logger.info(f"[AI DEBUG] Provider response status: {res_status} OK")
+                    logger.info(f"[AI DEBUG] Provider response received: true for model '{model_name}'")
+
                     res_json = json.loads(res_body)
                     raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    
-                    # Clean potential markdown block wrappers if present
-                    clean_text = raw_text.strip()
-                    if clean_text.startswith("```json"):
-                        clean_text = clean_text[7:]
-                    if clean_text.startswith("```"):
-                        clean_text = clean_text[3:]
-                    if clean_text.endswith("```"):
-                        clean_text = clean_text[:-3]
+                    print(f"\n[AI RAW DEBUG] Gemini text snippet: {raw_text[:300]}")
 
-                    parsed = json.loads(clean_text.strip())
-                    logger.info(f"Successfully generated recommendation using Gemini model: {model_name}")
-                    return validate_recommendation_json(parsed, domain_id)
+                    import re
+                    json_match = re.search(r'(\{[\s\S]*\})', raw_text)
+                    clean_text = json_match.group(1) if json_match else raw_text.strip()
+
+                    parsed = json.loads(clean_text)
+                    print(f"[AI RAW DEBUG] Parsed object type: {type(parsed)}")
+
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        parsed = parsed[0]
+                    if isinstance(parsed, dict) and "recommendation" in parsed and isinstance(parsed["recommendation"], dict):
+                        parsed = parsed["recommendation"]
+
+                    parsed["_model_name"] = model_name
+                    logger.info(f"[AI DEBUG] Successfully parsed structured JSON output from Gemini model: {model_name}")
+                    
+                    return validate_recommendation_json(parsed, domain_id, snapshot=student, curriculum=curriculum)
 
             except urllib.error.HTTPError as he:
-                logger.warning(f"Gemini API model {model_name} failed with HTTP {he.code}: {he.reason}. Trying next model...")
+                last_error_msg = f"HTTP {he.code}: {he.reason}"
+                logger.warning(f"[AI DEBUG] Provider model '{model_name}' returned status: {last_error_msg}. Trying next model...")
+                if he.code == 429:
+                    import time
+                    time.sleep(2)
                 continue
             except Exception as e:
-                logger.warning(f"Error calling Gemini API with model {model_name}: {e}. Trying next model...")
+                last_error_msg = str(e)
+                logger.warning(f"[AI DEBUG] Error calling provider model '{model_name}': {e}. Trying next model...")
                 continue
 
-        logger.warning("All Gemini API models failed. Falling back to MockAIProvider.")
-        return self.fallback.generate_structured_recommendation(input_data)
+        logger.error(f"[AI DEBUG] All Gemini API models failed. Last error: {last_error_msg}")
+        raise AIGenerationError(
+            message=f"Unable to generate personalized learning plan via AI. Details: {last_error_msg}",
+            code="AI_GENERATION_FAILED"
+        )
 
-def get_ai_provider() -> AIProvider:
+def get_ai_provider(force_mock: bool = False) -> AIProvider:
     """
-    Factory function returning GeminiAIProvider if API key present, else MockAIProvider.
+    Factory function returning GeminiAIProvider by default.
+    Returns MockAIProvider ONLY if force_mock=True is explicitly requested for offline unit tests.
     """
+    if force_mock:
+        return MockAIProvider()
+
     try:
         from dotenv import load_dotenv
         load_dotenv()
@@ -374,6 +410,4 @@ def get_ai_provider() -> AIProvider:
         pass
 
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("AI_API_KEY")
-    if api_key:
-        return GeminiAIProvider(api_key=api_key)
-    return MockAIProvider()
+    return GeminiAIProvider(api_key=api_key)
