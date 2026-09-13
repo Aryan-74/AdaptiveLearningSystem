@@ -341,6 +341,8 @@ def api_domains():
     domains = [d.to_dict() for d in get_all_domains()]
     return jsonify({"domains": domains})
 
+from services.ai_service import AIGenerationError
+
 @app.route('/api/recommendations/generate', methods=['POST'])
 @login_required
 def api_generate_recommendation():
@@ -349,11 +351,33 @@ def api_generate_recommendation():
         data = request.get_json(silent=True) or {}
         domain_id = data.get('domain_id', 'python')
         learning_goal = data.get('learning_goal')
+        force_mock = data.get('force_mock', False)
 
-        rec = generate_learning_recommendation(student_id, domain_id, learning_goal)
+        rec = generate_learning_recommendation(
+            student_id=student_id,
+            domain_id=domain_id,
+            learning_goal=learning_goal,
+            force_mock=force_mock
+        )
         return jsonify({"success": True, "recommendation": rec})
+    except AIGenerationError as e:
+        app.logger.warning(f"AI Generation Failed: {e}")
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": e.code,
+                "message": e.message
+            }
+        }), 500
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        app.logger.error(f"Unexpected error during recommendation generation: {e}")
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "AI_GENERATION_FAILED",
+                "message": f"Unable to generate your personalized learning plan. Details: {str(e)}"
+            }
+        }), 500
 
 @app.route('/api/recommendations/latest', methods=['GET'])
 @login_required

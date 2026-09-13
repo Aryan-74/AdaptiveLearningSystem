@@ -98,10 +98,14 @@ function renderStudentProfileCharts(data) {
     // 3. Topic-wise Performance Chart
     const topicCtx = document.getElementById('topicPerformanceChart');
     if (topicCtx && data.knowledge && data.knowledge.topic_scores) {
-        const topicLabels = Object.keys(data.knowledge.topic_scores).map(t => {
+        let topicScores = data.knowledge.topic_scores;
+        if (typeof topicScores === 'string') {
+            try { topicScores = JSON.parse(topicScores); } catch (e) { topicScores = {}; }
+        }
+        const topicLabels = Object.keys(topicScores).map(t => {
             return t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
         });
-        const topicValues = Object.values(data.knowledge.topic_scores).map(v => Math.round(v * 100));
+        const topicValues = Object.values(topicScores).map(v => Math.round(v * 100));
 
         new Chart(topicCtx, {
             type: 'bar',
@@ -136,11 +140,20 @@ function renderStudentProfileCharts(data) {
     // 4. Knowledge Component (KC) Performance Chart
     const kcCtx = document.getElementById('kcPerformanceChart');
     if (kcCtx && data.knowledge && data.knowledge.kc_scores && data.kc_names) {
+        let kcScores = data.knowledge.kc_scores;
+        if (typeof kcScores === 'string') {
+            try { kcScores = JSON.parse(kcScores); } catch (e) { kcScores = {}; }
+        }
+        let kcNames = data.kc_names;
+        if (typeof kcNames === 'string') {
+            try { kcNames = JSON.parse(kcNames); } catch (e) { kcNames = {}; }
+        }
+
         const kcLabels = [];
         const kcValues = [];
 
-        for (const [kcid, score] of Object.entries(data.knowledge.kc_scores)) {
-            const name = data.kc_names[kcid] || kcid;
+        for (const [kcid, score] of Object.entries(kcScores)) {
+            const name = kcNames[kcid] || kcid;
             kcLabels.push(name);
             kcValues.push(Math.round(score * 100));
         }

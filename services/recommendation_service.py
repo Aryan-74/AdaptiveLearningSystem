@@ -5,18 +5,22 @@ from typing import Dict, Any, Optional, List
 from db import get_db
 from services.profile_service import get_student_snapshot
 from services.knowledge_service import get_domain_by_id, get_domain_curriculum
-from services.ai_service import get_ai_provider
-from services.resource_service import validate_resource_url
+from services.ai_service import get_ai_provider, AIGenerationError
+from services.resource_service import validate_resource_url, retrieve_real_resources_for_area
+from models.recommendation import deduplicate_resources, validate_recommendation_json
 
 def generate_learning_recommendation(
     student_id: str,
     domain_id: str,
-    learning_goal: Optional[Dict[str, Any]] = None
+    learning_goal: Optional[Dict[str, Any]] = None,
+    force_mock: bool = False
 ) -> Dict[str, Any]:
     """
     Main domain-agnostic recommendation service pipeline.
-    Retrieves profile & curriculum, formats AI input, executes AI model,
-    validates output schema & resource URLs, and persists recommendation.
+    Retrieves single source of truth profile & domain curriculum, formats AI input,
+    executes AI model, enforces single source of truth mastery & resource deduplication,
+    validates output schema & resource URLs, and persists recommendation snapshot.
+    Raises AIGenerationError if AI generation fails (NO fake fallback success).
     """
     # 1. Validate domain exists
     domain = get_domain_by_id(domain_id)
@@ -29,7 +33,7 @@ def generate_learning_recommendation(
     # 3. Retrieve curriculum structure for domain
     curriculum = get_domain_curriculum(domain_id)
 
-    # 4. Build structured input for AI
+    # 4. Build structured input for AI using single source of truth profiles
     ai_input = {
         "learning_context": {
             "domain": domain.to_dict(),
@@ -42,21 +46,47 @@ def generate_learning_recommendation(
         "student": snapshot.to_dict()
     }
 
-    # 5. Call AI Provider abstraction
-    provider = get_ai_provider()
+    # 5. Call AI Provider abstraction (raises AIGenerationError if call fails)
+    provider = get_ai_provider(force_mock=force_mock)
     recommendation_json = provider.generate_structured_recommendation(ai_input)
 
-    # 6. Validate Resource URLs
-    if "resources" in recommendation_json and isinstance(recommendation_json["resources"], list):
-        for res in recommendation_json["resources"]:
-            validated = validate_resource_url(res.get("url"))
-            res["url"] = validated["url"]
-            res["verification_status"] = validated["verification_status"]
+    # 6. Validate & Override Single Source of Truth Mastery, Deduplicate Resources, Validate Area IDs
+    recommendation_json = validate_recommendation_json(
+        recommendation_json,
+        domain_id=domain_id,
+        snapshot=snapshot,
+        curriculum=curriculum
+    )
 
-    # 7. Persist recommendation snapshot to database
+    # 7. Decoupled Adaptive Resource Retrieval Layer: Search catalog based on remedial focus areas, mastery weighting, and learner preferences
+    from services.resource_service import select_adaptive_curated_resources, validate_canonical_resource
+    
+    l_profile_dict = snapshot.learner_profile.to_dict() if hasattr(snapshot, "learner_profile") else (snapshot.get("learner_profile", {}) if isinstance(snapshot, dict) else {})
+    p_areas = recommendation_json.get("priority_areas", [])
+
+    retrieved_resources = select_adaptive_curated_resources(
+        priority_areas=p_areas,
+        domain_id=domain_id,
+        learner_profile=l_profile_dict,
+        learning_goal=ai_input["learning_context"]["learning_goal"]
+    )
+
+    if retrieved_resources:
+        recommendation_json["resources"] = deduplicate_resources(retrieved_resources)
+    else:
+        existing_res = recommendation_json.get("resources", [])
+        canonical_resources = []
+        for item in existing_res:
+            validated = validate_canonical_resource(item)
+            if validated:
+                canonical_resources.append(validated)
+        recommendation_json["resources"] = deduplicate_resources(canonical_resources)
+
+    # 8. Persist recommendation snapshot to database
     rec_id = f"REC-{uuid.uuid4().hex[:8].upper()}"
-    model_name = provider.__class__.__name__
+    model_name = recommendation_json.get("_model_name") or provider.__class__.__name__
     recommendation_json["id"] = rec_id
+    recommendation_json["model_name"] = model_name
 
     conn = get_db()
     cursor = conn.cursor()
@@ -85,9 +115,9 @@ def get_latest_recommendation(student_id: str, domain_id: str) -> Optional[Dict[
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, recommendation_json 
+        SELECT id, model_name, generated_at, recommendation_json 
         FROM recommendations 
-        WHERE student_id = ? AND domain_id = ? 
+        WHERE student_id = ? AND domain_id = ? AND status = 'completed'
         ORDER BY generated_at DESC LIMIT 1;
     """, (student_id, domain_id))
     row = cursor.fetchone()
@@ -96,6 +126,8 @@ def get_latest_recommendation(student_id: str, domain_id: str) -> Optional[Dict[
     if row and row["recommendation_json"]:
         rec = json.loads(row["recommendation_json"])
         rec["id"] = row["id"]
+        rec["model_name"] = row["model_name"]
+        rec["generated_at"] = row["generated_at"]
         return rec
     return None
 
@@ -109,14 +141,14 @@ def get_recommendation_history(student_id: str, domain_id: Optional[str] = None)
         cursor.execute("""
             SELECT id, domain_id, generated_at, model_name, learning_goal, recommendation_json 
             FROM recommendations 
-            WHERE student_id = ? AND domain_id = ? 
+            WHERE student_id = ? AND domain_id = ? AND status = 'completed'
             ORDER BY generated_at DESC;
         """, (student_id, domain_id))
     else:
         cursor.execute("""
             SELECT id, domain_id, generated_at, model_name, learning_goal, recommendation_json 
             FROM recommendations 
-            WHERE student_id = ? 
+            WHERE student_id = ? AND status = 'completed'
             ORDER BY generated_at DESC;
         """, (student_id,))
 
